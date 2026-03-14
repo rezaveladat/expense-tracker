@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Expense & Balance Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    body { background: #f4f6f9; color: #222; padding: 20px; }
+    .container { max-width: 1500px; margin: auto; }
+    h1, h2, h3 { margin-bottom: 15px; }
+    .grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 20px; }
+    .card { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 3px 10px rgba(0,0,0,0.08); }
+    .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .form-grid .full { grid-column: 1 / -1; }
+    label { font-size: 14px; margin-bottom: 6px; display: block; font-weight: bold; }
+    input, select, button { width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; }
+    button { background: #2563eb; color: white; border: none; cursor: pointer; font-weight: bold; }
+    button:hover { background: #1d4ed8; }
+    .secondary-btn { background: #475569; }
+    .secondary-btn:hover { background: #334155; }
+    .success-btn { background: #16a34a; }
+    .success-btn:hover { background: #15803d; }
+    .delete-btn { background: #ef4444; padding: 6px 10px; font-size: 12px; border-radius: 6px; }
+    .edit-btn { background: #f59e0b; padding: 6px 10px; font-size: 12px; border-radius: 6px; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 15px; }
+    .summary-box { padding: 14px; border-radius: 12px; color: white; font-weight: bold; text-align: center; }
+    .balance { background: #16a34a; }
+    .week1 { background: #0ea5e9; }
+    .week2 { background: #7c3aed; }
+    .month { background: #f59e0b; }
+    .account-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-top: 16px; }
+    .account-box { border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; background: #f8fafc; }
+    .account-box h4 { font-size: 14px; margin-bottom: 8px; color: #334155; }
+    .account-balance { font-size: 22px; font-weight: bold; margin-bottom: 8px; }
+    .positive { color: #15803d; }
+    .negative { color: #dc2626; }
+    .account-meta { font-size: 12px; color: #64748b; line-height: 1.5; }
+    .toolbar-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 12px; }
+    .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .inline-actions button { width: auto; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .status-bar {
+      margin-bottom: 16px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: #e0f2fe;
+      color: #075985;
+      border: 1px solid #bae6fd;
+      font-size: 14px;
+    }
+    .status-error {
+      background: #fee2e2;
+      color: #991b1b;
+      border-color: #fecaca;
+    }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    table th, table td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 14px; vertical-align: top; }
+    .income { color: #16a34a; font-weight: bold; }
+    .expense { color: #dc2626; font-weight: bold; }
+    .calendar-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; }
+    .calendar-controls button { width: auto; padding: 8px 14px; }
+    .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+    .day-name, .day { background: #fff; border-radius: 10px; padding: 10px; min-height: 120px; border: 1px solid #e5e7eb; }
+    .day-name { font-weight: bold; text-align: center; min-height: auto; background: #eaf0ff; }
+    .day-number { font-weight: bold; margin-bottom: 6px; }
+    .calendar-item { font-size: 12px; padding: 4px 6px; border-radius: 6px; margin-top: 4px; color: white; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .calendar-income { background: #16a34a; }
+    .calendar-expense { background: #dc2626; }
+    .account-row { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; align-items: end; }
+    .small-note { font-size: 12px; color: #64748b; margin-top: 4px; }
+    .muted { color: #64748b; font-size: 13px; }
+    .split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .list-box { border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; background: #f8fafc; }
+    .list-box ul { margin-top: 8px; padding-left: 18px; }
+    .list-box li { margin-bottom: 6px; font-size: 14px; }
+    .pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: bold; background: #e2e8f0; color: #334155; }
+    #calendarExportArea { background: white; padding: 12px; border-radius: 12px; }
+    canvas { margin-top: 15px; max-height: 350px; }
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: 1fr; }
+      .toolbar-grid { grid-template-columns: 1fr 1fr; }
+      .split-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 900px) {
+      .summary { grid-template-columns: repeat(2, 1fr); }
+      .form-grid, .account-row { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .summary, .toolbar-grid { grid-template-columns: 1fr; }
+      .calendar { grid-template-columns: repeat(2, 1fr); }
+      .day-name { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Expense, Balance & Calendar Tracker</h1>
+    <div id="statusBar" class="status-bar">Connecting to Google Sheets...</div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="section-header">
+          <h2 id="formTitle">Add Transaction</h2>
+          <span id="editBadge" class="pill" style="display:none;">Editing transaction</span>
+        </div>
+
+        <div class="form-grid">
+          <div>
+            <label>Description</label>
+            <input type="text" id="description" placeholder="e.g. Rent, Salary, Fuel" />
+          </div>
+          <div>
+            <label>Amount</label>
+            <input type="number" id="amount" step="0.01" placeholder="e.g. 250" />
+          </div>
+          <div>
+            <label>Type</label>
+            <select id="type">
+              <option value="expense">Expense</option>
+              <option value="income">Income</option>
+            </select>
+          </div>
+          <div>
+            <label>Date</label>
+            <input type="date" id="date" />
+          </div>
+          <div>
+            <label>Category</label>
+            <input type="text" id="category" placeholder="e.g. Bills, Grocery, Salary" />
+          </div>
+          <div>
+            <label>Frequency</label>
+            <select id="frequency">
+              <option value="once">One-time</option>
+              <option value="weekly">Weekly</option>
+              <option value="fortnightly">Fortnightly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div class="full">
+            <label>Account</label>
+            <div class="account-row">
+              <div>
+                <select id="accountSelect">
+                  <option value="">Select saved account</option>
+                </select>
+              </div>
+              <div>
+                <button type="button" class="secondary-btn" onclick="toggleNewAccountInput()">Add New Account</button>
+              </div>
+            </div>
+            <div id="newAccountWrapper" style="display:none; margin-top:10px;">
+              <input type="text" id="newAccount" placeholder="e.g. NAB Everyday, Westpac, Cash, Savings" />
+              <div class="small-note">New account names are saved in Google Sheets for future use.</div>
+            </div>
+          </div>
+          <div class="full inline-actions">
+            <button id="saveBtn" onclick="saveTransaction()">Add & Save</button>
+            <button type="button" id="cancelEditBtn" class="secondary-btn" onclick="cancelEdit()" style="display:none;">Cancel Edit</button>
+            <button type="button" class="secondary-btn" onclick="syncFromServer()">Refresh Data</button>
+          </div>
+        </div>
+
+        <div class="summary">
+          <div class="summary-box balance">Balance<br><span id="balanceValue">$0.00</span></div>
+          <div class="summary-box week1">1 Week Estimate<br><span id="week1Value">$0.00</span></div>
+          <div class="summary-box week2">2 Week Estimate<br><span id="week2Value">$0.00</span></div>
+          <div class="summary-box month">1 Month Estimate<br><span id="monthValue">$0.00</span></div>
+        </div>
+
+        <h2 style="margin-top:20px;">Balance by Account</h2>
+        <div id="accountSummary" class="account-summary-grid"></div>
+
+        <div class="section-header" style="margin-top:20px;">
+          <h2>Filters</h2>
+          <button type="button" class="secondary-btn" style="width:auto;" onclick="clearFilters()">Clear Filters</button>
+        </div>
+        <div class="toolbar-grid">
+          <div>
+            <label>Filter by Account</label>
+            <select id="filterAccount" onchange="renderAll()">
+              <option value="">All accounts</option>
+            </select>
+          </div>
+          <div>
+            <label>Filter by Category</label>
+            <select id="filterCategory" onchange="renderAll()">
+              <option value="">All categories</option>
+            </select>
+          </div>
+          <div>
+            <label>From Date</label>
+            <input type="date" id="filterFromDate" onchange="renderAll()" />
+          </div>
+          <div>
+            <label>To Date</label>
+            <input type="date" id="filterToDate" onchange="renderAll()" />
+          </div>
+          <div>
+            <label>Search</label>
+            <input type="text" id="filterSearch" placeholder="Description" oninput="renderAll()" />
+          </div>
+        </div>
+
+        <h2 style="margin-top:20px;">Transactions</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th>Account</th>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Amount</th>
+              <th>Freq</th>
+              <th>Category</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="transactionTable"></tbody>
+        </table>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="section-header">
+            <h2>Calendar View</h2>
+            <button type="button" class="success-btn" style="width:auto;" onclick="exportCalendarToPDF()">Export Calendar PDF</button>
+          </div>
+          <div id="calendarExportArea">
+            <div class="calendar-controls">
+              <button onclick="changeMonth(-1)">Previous</button>
+              <h3 id="monthYear"></h3>
+              <button onclick="changeMonth(1)">Next</button>
+            </div>
+            <div class="calendar" id="calendar"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <h2>Plot</h2>
+          <canvas id="expenseChart"></canvas>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <h2>Recurring Bills</h2>
+          <div class="split-grid">
+            <div class="list-box">
+              <h3>Upcoming Bills</h3>
+              <div class="muted">Next 30 days, recurring expenses only.</div>
+              <ul id="upcomingBillsList"></ul>
+            </div>
+            <div class="list-box">
+              <h3>Past Bills</h3>
+              <div class="muted">Last 30 days, recurring expenses only.</div>
+              <ul id="pastBillsList"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CONFIG = {
+      APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwavdvgkXHcLInYA_BGgrcSLsOVK-ZZRAa3MQY4cM_FSJ3JS5EB5BLfAZfd9Q28U1XGig/exec'
+    };
+
+    let transactions = [];
+    let savedAccounts = [];
+    let openingBalances = {};
+    let currentDate = new Date();
+    let expenseChart;
+    let editingTransactionId = null;
+    let bootstrapped = false;
+
+    function setStatus(message, isError = false) {
+      const bar = document.getElementById('statusBar');
+      bar.textContent = message;
+      bar.className = isError ? 'status-bar status-error' : 'status-bar';
+    }
+
+    function formatCurrency(value) {
+      return '$' + Number(value || 0).toFixed(2);
+    }
+
+    function formatDateDisplay(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString();
+    }
+
+    function normalizeText(text) {
+      return (text || '').trim().replace(/\s+/g, ' ');
+    }
+
+    async function apiCall(action, payload = {}) {
+      if (!CONFIG.APPS_SCRIPT_URL || CONFIG.APPS_SCRIPT_URL.includes('PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE')) {
+        throw new Error('Apps Script URL is not configured.');
+      }
+
+      const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action, payload })
+      });
+
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error || 'Unknown server error');
+      return data;
+    }
+
+    async function syncFromServer(showStatus = true) {
+      try {
+        if (showStatus) setStatus('Loading data from Google Sheets...');
+        const data = await apiCall('getAll');
+        transactions = Array.isArray(data.transactions) ? data.transactions : [];
+        savedAccounts = Array.isArray(data.accounts) ? data.accounts : [];
+        openingBalances = data.openingBalances || {};
+        renderAll();
+        setStatus('Connected to Google Sheets. Data is shared across your devices.');
+      } catch (error) {
+        setStatus('Connection failed: ' + error.message, true);
+      }
+    }
+
+    function renderAccountOptions() {
+      const selects = ['accountSelect', 'filterAccount'];
+      selects.forEach(selectId => {
+        const select = document.getElementById(selectId);
+        const currentValue = select.value;
+        const defaultText = selectId === 'accountSelect' ? 'Select saved account' : 'All accounts';
+        select.innerHTML = `<option value="">${defaultText}</option>`;
+
+        savedAccounts.slice().sort((a, b) => a.localeCompare(b)).forEach(account => {
+          const option = document.createElement('option');
+          option.value = account;
+          option.textContent = account;
+          select.appendChild(option);
+        });
+
+        if (savedAccounts.includes(currentValue) || currentValue === '') {
+          select.value = currentValue;
+        }
+      });
+    }
+
+    function renderCategoryOptions() {
+      const filterCategory = document.getElementById('filterCategory');
+      const currentValue = filterCategory.value;
+      const categories = [...new Set(transactions.map(t => normalizeText(t.category)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+      filterCategory.innerHTML = '<option value="">All categories</option>';
+      categories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        filterCategory.appendChild(option);
+      });
+      if (categories.includes(currentValue) || currentValue === '') {
+        filterCategory.value = currentValue;
+      }
+    }
+
+    async function addAccountIfNew(accountName) {
+      const cleaned = normalizeText(accountName);
+      if (!cleaned) return cleaned;
+
+      const exists = savedAccounts.some(account => account.toLowerCase() === cleaned.toLowerCase());
+      if (!exists) {
+        setStatus('Saving new account to Google Sheets...');
+        await apiCall('upsertAccount', { account: cleaned, openingBalance: 0 });
+        await syncFromServer(false);
+      }
+      return cleaned;
+    }
+
+    function toggleNewAccountInput() {
+      const wrapper = document.getElementById('newAccountWrapper');
+      wrapper.style.display = wrapper.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function getSelectedAccount() {
+      const selectedAccount = normalizeText(document.getElementById('accountSelect').value);
+      const newAccount = normalizeText(document.getElementById('newAccount').value);
+
+      if (newAccount) {
+        return await addAccountIfNew(newAccount);
+      }
+      return selectedAccount;
+    }
+
+    function resetFormState() {
+      editingTransactionId = null;
+      document.getElementById('formTitle').textContent = 'Add Transaction';
+      document.getElementById('editBadge').style.display = 'none';
+      document.getElementById('saveBtn').textContent = 'Add & Save';
+      document.getElementById('cancelEditBtn').style.display = 'none';
+    }
+
+    function clearForm() {
+      document.getElementById('description').value = '';
+      document.getElementById('amount').value = '';
+      document.getElementById('type').value = 'expense';
+      document.getElementById('date').value = '';
+      document.getElementById('category').value = '';
+      document.getElementById('frequency').value = 'once';
+      document.getElementById('accountSelect').value = '';
+      document.getElementById('newAccount').value = '';
+      resetFormState();
+    }
+
+    async function saveTransaction() {
+      try {
+        const description = document.getElementById('description').value.trim();
+        const amount = parseFloat(document.getElementById('amount').value);
+        const type = document.getElementById('type').value;
+        const date = document.getElementById('date').value;
+        const category = document.getElementById('category').value.trim();
+        const frequency = document.getElementById('frequency').value;
+        const account = await getSelectedAccount();
+
+        if (!description || Number.isNaN(amount) || amount <= 0 || !date || !account) {
+          alert('Please fill description, amount, date, and account. Amount must be greater than zero.');
+          return;
+        }
+
+        const payload = {
+          id: editingTransactionId || crypto.randomUUID(),
+          description,
+          amount,
+          type,
+          date,
+          category,
+          frequency,
+          account
+        };
+
+        setStatus(editingTransactionId ? 'Updating transaction in Google Sheets...' : 'Saving transaction to Google Sheets...');
+        await apiCall('upsertTransaction', payload);
+        clearForm();
+        await syncFromServer(false);
+        setStatus('Saved to Google Sheets.');
+      } catch (error) {
+        setStatus('Save failed: ' + error.message, true);
+      }
+    }
+
+    function editTransaction(id) {
+      const t = transactions.find(item => item.id === id);
+      if (!t) return;
+
+      editingTransactionId = id;
+      document.getElementById('description').value = t.description;
+      document.getElementById('amount').value = t.amount;
+      document.getElementById('type').value = t.type;
+      document.getElementById('date').value = t.date;
+      document.getElementById('category').value = t.category || '';
+      document.getElementById('frequency').value = t.frequency;
+      document.getElementById('accountSelect').value = savedAccounts.includes(t.account) ? t.account : '';
+      document.getElementById('newAccount').value = savedAccounts.includes(t.account) ? '' : t.account;
+
+      document.getElementById('formTitle').textContent = 'Edit Transaction';
+      document.getElementById('editBadge').style.display = 'inline-block';
+      document.getElementById('saveBtn').textContent = 'Update Transaction';
+      document.getElementById('cancelEditBtn').style.display = 'inline-block';
+      if (!savedAccounts.includes(t.account)) {
+        document.getElementById('newAccountWrapper').style.display = 'block';
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+      clearForm();
+    }
+
+    async function deleteTransaction(id) {
+      try {
+        if (editingTransactionId === id) clearForm();
+        setStatus('Deleting transaction from Google Sheets...');
+        await apiCall('deleteTransaction', { id });
+        await syncFromServer(false);
+        setStatus('Deleted from Google Sheets.');
+      } catch (error) {
+        setStatus('Delete failed: ' + error.message, true);
+      }
+    }
+
+    function clearFilters() {
+      document.getElementById('filterAccount').value = '';
+      document.getElementById('filterCategory').value = '';
+      document.getElementById('filterFromDate').value = '';
+      document.getElementById('filterToDate').value = '';
+      document.getElementById('filterSearch').value = '';
+      renderAll();
+    }
+
+    function getFilteredTransactions() {
+      const account = document.getElementById('filterAccount').value;
+      const category = document.getElementById('filterCategory').value;
+      const fromDate = document.getElementById('filterFromDate').value;
+      const toDate = document.getElementById('filterToDate').value;
+      const search = normalizeText(document.getElementById('filterSearch').value).toLowerCase();
+
+      return transactions.filter(t => {
+        const matchesAccount = !account || t.account === account;
+        const matchesCategory = !category || normalizeText(t.category) === category;
+        const matchesFrom = !fromDate || t.date >= fromDate;
+        const matchesTo = !toDate || t.date <= toDate;
+        const matchesSearch = !search || t.description.toLowerCase().includes(search);
+        return matchesAccount && matchesCategory && matchesFrom && matchesTo && matchesSearch;
+      });
+    }
+
+    function calculateCurrentBalance() {
+      const accountFilter = document.getElementById('filterAccount').value;
+      const filtered = getFilteredTransactions();
+      let openingTotal = 0;
+
+      if (accountFilter) {
+        openingTotal = Number(openingBalances[accountFilter] || 0);
+      } else {
+        openingTotal = savedAccounts.reduce((sum, account) => sum + Number(openingBalances[account] || 0), 0);
+      }
+
+      const movement = filtered.reduce((sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount), 0);
+      return openingTotal + movement;
+    }
+
+    function calculateAccountBalances() {
+      const accountMap = {};
+      savedAccounts.forEach(account => {
+        accountMap[account] = {
+          opening: Number(openingBalances[account] || 0),
+          balance: Number(openingBalances[account] || 0),
+          income: 0,
+          expense: 0,
+          count: 0
+        };
+      });
+
+      const filtered = getFilteredTransactions();
+      filtered.forEach(t => {
+        if (!accountMap[t.account]) {
+          accountMap[t.account] = { opening: Number(openingBalances[t.account] || 0), balance: Number(openingBalances[t.account] || 0), income: 0, expense: 0, count: 0 };
+        }
+        accountMap[t.account].count += 1;
+        if (t.type === 'income') {
+          accountMap[t.account].income += t.amount;
+          accountMap[t.account].balance += t.amount;
+        } else {
+          accountMap[t.account].expense += t.amount;
+          accountMap[t.account].balance -= t.amount;
+        }
+      });
+
+      return accountMap;
+    }
+
+    async function updateOpeningBalance(account, value) {
+      try {
+        setStatus('Saving opening balance to Google Sheets...');
+        await apiCall('upsertAccount', { account, openingBalance: Number(value || 0) });
+        await syncFromServer(false);
+        setStatus('Opening balance updated.');
+      } catch (error) {
+        setStatus('Opening balance update failed: ' + error.message, true);
+      }
+    }
+
+    function occursWithinDays(transaction, days) {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setDate(end.getDate() + days);
+      const txDate = new Date(transaction.date + 'T00:00:00');
+
+      if (transaction.frequency === 'once') {
+        return txDate >= start && txDate <= end;
+      }
+      if (transaction.frequency === 'weekly') return true;
+      if (transaction.frequency === 'fortnightly') return days >= 14;
+      if (transaction.frequency === 'monthly') return days >= 30;
+      return false;
+    }
+
+    function calculateEstimate(days) {
+      const filtered = getFilteredTransactions();
+      let total = 0;
+      filtered.forEach(t => {
+        if (t.frequency === 'once') {
+          if (occursWithinDays(t, days)) total += t.type === 'income' ? t.amount : -t.amount;
+        } else if (t.frequency === 'weekly') {
+          total += (t.type === 'income' ? t.amount : -t.amount) * Math.ceil(days / 7);
+        } else if (t.frequency === 'fortnightly') {
+          total += (t.type === 'income' ? t.amount : -t.amount) * Math.ceil(days / 14);
+        } else if (t.frequency === 'monthly') {
+          total += (t.type === 'income' ? t.amount : -t.amount) * Math.ceil(days / 30);
+        }
+      });
+      return total;
+    }
+
+    function renderSummary() {
+      document.getElementById('balanceValue').textContent = formatCurrency(calculateCurrentBalance());
+      document.getElementById('week1Value').textContent = formatCurrency(calculateEstimate(7));
+      document.getElementById('week2Value').textContent = formatCurrency(calculateEstimate(14));
+      document.getElementById('monthValue').textContent = formatCurrency(calculateEstimate(30));
+    }
+
+    function renderAccountSummary() {
+      const wrapper = document.getElementById('accountSummary');
+      const balances = calculateAccountBalances();
+      const accountFilter = document.getElementById('filterAccount').value;
+      let entries = Object.entries(balances).sort((a, b) => a[0].localeCompare(b[0]));
+      if (accountFilter) entries = entries.filter(([account]) => account === accountFilter);
+
+      wrapper.innerHTML = '';
+      if (entries.length === 0) {
+        wrapper.innerHTML = '<div class="account-box">No accounts yet.</div>';
+        return;
+      }
+
+      entries.forEach(([account, data]) => {
+        const box = document.createElement('div');
+        const balanceClass = data.balance >= 0 ? 'positive' : 'negative';
+        box.className = 'account-box';
+        box.innerHTML = `
+          <h4>${account}</h4>
+          <label style="font-size:12px; margin-bottom:4px;">Opening Balance</label>
+          <input type="number" step="0.01" value="${Number(data.opening).toFixed(2)}" onchange="updateOpeningBalance('${account.replace(/'/g, "\\'")}', this.value)" />
+          <div class="account-balance ${balanceClass}" style="margin-top:10px;">${formatCurrency(data.balance)}</div>
+          <div class="account-meta">
+            Income: ${formatCurrency(data.income)}<br>
+            Expense: ${formatCurrency(data.expense)}<br>
+            Transactions: ${data.count}
+          </div>
+        `;
+        wrapper.appendChild(box);
+      });
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('transactionTable');
+      tbody.innerHTML = '';
+      const filtered = getFilteredTransactions();
+
+      filtered.slice().sort((a, b) => new Date(a.date) - new Date(b.date)).forEach(t => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${t.description}</td>
+          <td>${t.account || '-'}</td>
+          <td>${t.date}</td>
+          <td class="${t.type}">${t.type}</td>
+          <td class="${t.type}">${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}</td>
+          <td>${t.frequency}</td>
+          <td>${t.category || '-'}</td>
+          <td>
+            <div class="inline-actions">
+              <button class="edit-btn" onclick="editTransaction('${t.id}')">Edit</button>
+              <button class="delete-btn" onclick="deleteTransaction('${t.id}')">Delete</button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function getRecurringOccurrencesForMonth(transaction, year, month) {
+      const dates = [];
+      const monthStart = new Date(year, month, 1);
+      const monthEnd = new Date(year, month + 1, 0);
+      const baseDate = new Date(transaction.date + 'T00:00:00');
+
+      if (transaction.frequency === 'once') {
+        if (baseDate.getFullYear() === year && baseDate.getMonth() === month) dates.push(baseDate);
+        return dates;
+      }
+
+      let cursor = new Date(baseDate);
+      while (cursor <= monthEnd) {
+        if (cursor >= monthStart && cursor.getMonth() === month) dates.push(new Date(cursor));
+        if (transaction.frequency === 'weekly') cursor.setDate(cursor.getDate() + 7);
+        else if (transaction.frequency === 'fortnightly') cursor.setDate(cursor.getDate() + 14);
+        else if (transaction.frequency === 'monthly') cursor.setMonth(cursor.getMonth() + 1);
+        else break;
+      }
+      return dates;
+    }
+
+    function renderCalendar() {
+      const calendar = document.getElementById('calendar');
+      calendar.innerHTML = '';
+      const month = currentDate.getMonth();
+      const year = currentDate.getFullYear();
+      document.getElementById('monthYear').textContent = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+      ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => {
+        const div = document.createElement('div');
+        div.className = 'day-name';
+        div.textContent = day;
+        calendar.appendChild(div);
+      });
+
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const filtered = getFilteredTransactions();
+      const calendarMap = {};
+
+      filtered.forEach(t => {
+        const occurrences = getRecurringOccurrencesForMonth(t, year, month);
+        occurrences.forEach(occDate => {
+          const key = `${occDate.getFullYear()}-${String(occDate.getMonth() + 1).padStart(2, '0')}-${String(occDate.getDate()).padStart(2, '0')}`;
+          if (!calendarMap[key]) calendarMap[key] = [];
+          calendarMap[key].push(t);
+        });
+      });
+
+      for (let i = 0; i < firstDay; i++) {
+        const empty = document.createElement('div');
+        empty.className = 'day';
+        calendar.appendChild(empty);
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayDiv = document.createElement('div');
+        dayDiv.className = 'day';
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        dayDiv.innerHTML = `<div class="day-number">${day}</div>`;
+
+        (calendarMap[dateStr] || []).forEach(t => {
+          const item = document.createElement('div');
+          item.className = `calendar-item ${t.type === 'income' ? 'calendar-income' : 'calendar-expense'}`;
+          item.textContent = `${t.account}: ${t.description} ${t.type === 'income' ? '+' : '-'}${t.amount}`;
+          dayDiv.appendChild(item);
+        });
+
+        calendar.appendChild(dayDiv);
+      }
+    }
+
+    function changeMonth(direction) {
+      currentDate.setMonth(currentDate.getMonth() + direction);
+      renderCalendar();
+    }
+
+    function renderChart() {
+      const balances = calculateAccountBalances();
+      const accountFilter = document.getElementById('filterAccount').value;
+      let labels = Object.keys(balances).sort((a, b) => a.localeCompare(b));
+      if (accountFilter) labels = labels.filter(label => label === accountFilter);
+      const incomeData = labels.map(label => balances[label].income);
+      const expenseData = labels.map(label => balances[label].expense);
+      const netData = labels.map(label => balances[label].balance);
+
+      const ctx = document.getElementById('expenseChart').getContext('2d');
+      if (expenseChart) expenseChart.destroy();
+      expenseChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Income by Account', data: incomeData },
+            { label: 'Expense by Account', data: expenseData },
+            { label: 'Net Balance by Account', data: netData, type: 'line' }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'top' } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+
+    function getNextOccurrence(transaction, today) {
+      const base = new Date(transaction.date + 'T00:00:00');
+      if (transaction.frequency === 'once') return base >= today ? base : null;
+      const next = new Date(base);
+      while (next < today) {
+        if (transaction.frequency === 'weekly') next.setDate(next.getDate() + 7);
+        else if (transaction.frequency === 'fortnightly') next.setDate(next.getDate() + 14);
+        else if (transaction.frequency === 'monthly') next.setMonth(next.getMonth() + 1);
+        else return null;
+      }
+      return next;
+    }
+
+    function getPreviousOccurrence(transaction, today) {
+      const base = new Date(transaction.date + 'T00:00:00');
+      if (transaction.frequency === 'once') return base < today ? base : null;
+      const prev = new Date(base);
+      let lastValid = null;
+      while (prev < today) {
+        lastValid = new Date(prev);
+        if (transaction.frequency === 'weekly') prev.setDate(prev.getDate() + 7);
+        else if (transaction.frequency === 'fortnightly') prev.setDate(prev.getDate() + 14);
+        else if (transaction.frequency === 'monthly') prev.setMonth(prev.getMonth() + 1);
+        else return null;
+      }
+      return lastValid;
+    }
+
+    function renderBillsLists() {
+      const upcomingList = document.getElementById('upcomingBillsList');
+      const pastList = document.getElementById('pastBillsList');
+      upcomingList.innerHTML = '';
+      pastList.innerHTML = '';
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const in30 = new Date(today);
+      in30.setDate(in30.getDate() + 30);
+      const past30 = new Date(today);
+      past30.setDate(past30.getDate() - 30);
+
+      const filtered = getFilteredTransactions().filter(t => t.type === 'expense' && t.frequency !== 'once');
+      const upcoming = [];
+      const past = [];
+
+      filtered.forEach(t => {
+        const next = getNextOccurrence(t, today);
+        if (next && next <= in30) upcoming.push({ transaction: t, date: next });
+        const prev = getPreviousOccurrence(t, today);
+        if (prev && prev >= past30) past.push({ transaction: t, date: prev });
+      });
+
+      upcoming.sort((a, b) => a.date - b.date);
+      past.sort((a, b) => b.date - a.date);
+
+      if (upcoming.length === 0) {
+        upcomingList.innerHTML = '<li>No upcoming recurring bills.</li>';
+      } else {
+        upcoming.forEach(item => {
+          const li = document.createElement('li');
+          li.textContent = `${formatDateDisplay(item.date.toISOString().slice(0,10))} — ${item.transaction.account} — ${item.transaction.description} — ${formatCurrency(item.transaction.amount)} (${item.transaction.frequency})`;
+          upcomingList.appendChild(li);
+        });
+      }
+
+      if (past.length === 0) {
+        pastList.innerHTML = '<li>No recent recurring bills.</li>';
+      } else {
+        past.forEach(item => {
+          const li = document.createElement('li');
+          li.textContent = `${formatDateDisplay(item.date.toISOString().slice(0,10))} — ${item.transaction.account} — ${item.transaction.description} — ${formatCurrency(item.transaction.amount)} (${item.transaction.frequency})`;
+          pastList.appendChild(li);
+        });
+      }
+    }
+
+    async function exportCalendarToPDF() {
+      const area = document.getElementById('calendarExportArea');
+      const canvas = await html2canvas(area, { scale: 2, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('landscape', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const availableWidth = pageWidth - (margin * 2);
+      const availableHeight = pageHeight - (margin * 2);
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(availableWidth / imgWidth, availableHeight / imgHeight);
+      const renderWidth = imgWidth * ratio;
+      const renderHeight = imgHeight * ratio;
+      const x = (pageWidth - renderWidth) / 2;
+      const y = (pageHeight - renderHeight) / 2;
+      pdf.addImage(imgData, 'PNG', x, y, renderWidth, renderHeight);
+      const monthLabel = document.getElementById('monthYear').textContent.replace(/\s+/g, '_');
+      pdf.save(`calendar_${monthLabel}.pdf`);
+    }
+
+    function renderAll() {
+      renderAccountOptions();
+      renderCategoryOptions();
+      renderSummary();
+      renderAccountSummary();
+      renderTable();
+      renderCalendar();
+      renderChart();
+      renderBillsLists();
+    }
+
+    async function bootstrap() {
+      if (bootstrapped) return;
+      bootstrapped = true;
+      clearForm();
+      await syncFromServer();
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>
