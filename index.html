@@ -288,12 +288,30 @@
     }
 
     function formatDateDisplay(dateStr) {
-      const d = new Date(dateStr + 'T00:00:00');
+      const normalized = normalizeDateString(dateStr);
+      if (!normalized) return String(dateStr || '');
+      const d = new Date(normalized + 'T00:00:00');
       return d.toLocaleDateString();
     }
 
     function normalizeText(text) {
       return (text || '').trim().replace(/\s+/g, ' ');
+    }
+
+    function normalizeDateString(dateValue) {
+      if (!dateValue) return '';
+
+      if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        return dateValue;
+      }
+
+      const d = new Date(dateValue);
+      if (isNaN(d)) return '';
+
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
     }
 
     async function apiCall(action, payload = {}) {
@@ -455,7 +473,7 @@
       document.getElementById('description').value = t.description;
       document.getElementById('amount').value = t.amount;
       document.getElementById('type').value = t.type;
-      document.getElementById('date').value = t.date;
+      document.getElementById('date').value = normalizeDateString(t.date);
       document.getElementById('category').value = t.category || '';
       document.getElementById('frequency').value = t.frequency;
       document.getElementById('accountSelect').value = savedAccounts.includes(t.account) ? t.account : '';
@@ -504,10 +522,11 @@
       const search = normalizeText(document.getElementById('filterSearch').value).toLowerCase();
 
       return transactions.filter(t => {
+        const txDate = normalizeDateString(t.date);
         const matchesAccount = !account || t.account === account;
         const matchesCategory = !category || normalizeText(t.category) === category;
-        const matchesFrom = !fromDate || t.date >= fromDate;
-        const matchesTo = !toDate || t.date <= toDate;
+        const matchesFrom = !fromDate || (txDate && txDate >= fromDate);
+        const matchesTo = !toDate || (txDate && txDate <= toDate);
         const matchesSearch = !search || t.description.toLowerCase().includes(search);
         return matchesAccount && matchesCategory && matchesFrom && matchesTo && matchesSearch;
       });
@@ -543,7 +562,13 @@
       const filtered = getFilteredTransactions();
       filtered.forEach(t => {
         if (!accountMap[t.account]) {
-          accountMap[t.account] = { opening: Number(openingBalances[t.account] || 0), balance: Number(openingBalances[t.account] || 0), income: 0, expense: 0, count: 0 };
+          accountMap[t.account] = {
+            opening: Number(openingBalances[t.account] || 0),
+            balance: Number(openingBalances[t.account] || 0),
+            income: 0,
+            expense: 0,
+            count: 0
+          };
         }
         accountMap[t.account].count += 1;
         if (t.type === 'income') {
@@ -574,7 +599,10 @@
       start.setHours(0, 0, 0, 0);
       const end = new Date();
       end.setDate(end.getDate() + days);
-      const txDate = new Date(transaction.date + 'T00:00:00');
+
+      const normalizedDate = normalizeDateString(transaction.date);
+      if (!normalizedDate) return false;
+      const txDate = new Date(normalizedDate + 'T00:00:00');
 
       if (transaction.frequency === 'once') {
         return txDate >= start && txDate <= end;
@@ -646,55 +674,78 @@
       tbody.innerHTML = '';
       const filtered = getFilteredTransactions();
 
-      filtered.slice().sort((a, b) => new Date(a.date) - new Date(b.date)).forEach(t => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${t.description}</td>
-          <td>${t.account || '-'}</td>
-          <td>${t.date}</td>
-          <td class="${t.type}">${t.type}</td>
-          <td class="${t.type}">${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}</td>
-          <td>${t.frequency}</td>
-          <td>${t.category || '-'}</td>
-          <td>
-            <div class="inline-actions">
-              <button class="edit-btn" onclick="editTransaction('${t.id}')">Edit</button>
-              <button class="delete-btn" onclick="deleteTransaction('${t.id}')">Delete</button>
-            </div>
-          </td>
-        `;
-        tbody.appendChild(row);
-      });
+      filtered
+        .slice()
+        .sort((a, b) => new Date(normalizeDateString(a.date)) - new Date(normalizeDateString(b.date)))
+        .forEach(t => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${t.description}</td>
+            <td>${t.account || '-'}</td>
+            <td>${normalizeDateString(t.date) || t.date}</td>
+            <td class="${t.type}">${t.type}</td>
+            <td class="${t.type}">${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}</td>
+            <td>${t.frequency}</td>
+            <td>${t.category || '-'}</td>
+            <td>
+              <div class="inline-actions">
+                <button class="edit-btn" onclick="editTransaction('${t.id}')">Edit</button>
+                <button class="delete-btn" onclick="deleteTransaction('${t.id}')">Delete</button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(row);
+        });
     }
 
     function getRecurringOccurrencesForMonth(transaction, year, month) {
       const dates = [];
+      const normalizedDate = normalizeDateString(transaction.date);
+      if (!normalizedDate) return dates;
+
       const monthStart = new Date(year, month, 1);
       const monthEnd = new Date(year, month + 1, 0);
-      const baseDate = new Date(transaction.date + 'T00:00:00');
+      const baseDate = new Date(normalizedDate + 'T00:00:00');
+
+      if (isNaN(baseDate)) return dates;
 
       if (transaction.frequency === 'once') {
-        if (baseDate.getFullYear() === year && baseDate.getMonth() === month) dates.push(baseDate);
+        if (baseDate.getFullYear() === year && baseDate.getMonth() === month) {
+          dates.push(new Date(baseDate));
+        }
         return dates;
       }
 
       let cursor = new Date(baseDate);
+
       while (cursor <= monthEnd) {
-        if (cursor >= monthStart && cursor.getMonth() === month) dates.push(new Date(cursor));
-        if (transaction.frequency === 'weekly') cursor.setDate(cursor.getDate() + 7);
-        else if (transaction.frequency === 'fortnightly') cursor.setDate(cursor.getDate() + 14);
-        else if (transaction.frequency === 'monthly') cursor.setMonth(cursor.getMonth() + 1);
-        else break;
+        if (cursor >= monthStart && cursor.getMonth() === month) {
+          dates.push(new Date(cursor));
+        }
+
+        if (transaction.frequency === 'weekly') {
+          cursor.setDate(cursor.getDate() + 7);
+        } else if (transaction.frequency === 'fortnightly') {
+          cursor.setDate(cursor.getDate() + 14);
+        } else if (transaction.frequency === 'monthly') {
+          cursor.setMonth(cursor.getMonth() + 1);
+        } else {
+          break;
+        }
       }
+
       return dates;
     }
 
     function renderCalendar() {
       const calendar = document.getElementById('calendar');
       calendar.innerHTML = '';
+
       const month = currentDate.getMonth();
       const year = currentDate.getFullYear();
-      document.getElementById('monthYear').textContent = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+      document.getElementById('monthYear').textContent =
+        currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
       ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => {
         const div = document.createElement('div');
@@ -706,6 +757,7 @@
       const firstDay = new Date(year, month, 1).getDay();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       const filtered = getFilteredTransactions();
+
       const calendarMap = {};
 
       filtered.forEach(t => {
@@ -726,6 +778,7 @@
       for (let day = 1; day <= daysInMonth; day++) {
         const dayDiv = document.createElement('div');
         dayDiv.className = 'day';
+
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         dayDiv.innerHTML = `<div class="day-number">${day}</div>`;
 
@@ -775,8 +828,12 @@
     }
 
     function getNextOccurrence(transaction, today) {
-      const base = new Date(transaction.date + 'T00:00:00');
+      const normalizedDate = normalizeDateString(transaction.date);
+      if (!normalizedDate) return null;
+
+      const base = new Date(normalizedDate + 'T00:00:00');
       if (transaction.frequency === 'once') return base >= today ? base : null;
+
       const next = new Date(base);
       while (next < today) {
         if (transaction.frequency === 'weekly') next.setDate(next.getDate() + 7);
@@ -788,8 +845,12 @@
     }
 
     function getPreviousOccurrence(transaction, today) {
-      const base = new Date(transaction.date + 'T00:00:00');
+      const normalizedDate = normalizeDateString(transaction.date);
+      if (!normalizedDate) return null;
+
+      const base = new Date(normalizedDate + 'T00:00:00');
       if (transaction.frequency === 'once') return base < today ? base : null;
+
       const prev = new Date(base);
       let lastValid = null;
       while (prev < today) {
