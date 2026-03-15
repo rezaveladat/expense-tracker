@@ -64,7 +64,7 @@
     .calendar-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; }
     .calendar-controls button { width: auto; padding: 8px 14px; }
     .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
-    .day-name, .day { background: #fff; border-radius: 10px; padding: 10px; min-height: 140px; border: 1px solid #e5e7eb; }
+    .day-name, .day { background: #fff; border-radius: 10px; padding: 10px; min-height: 150px; border: 1px solid #e5e7eb; }
     .day-name { font-weight: bold; text-align: center; min-height: auto; background: #eaf0ff; }
     .day-number { font-weight: bold; margin-bottom: 6px; }
     .day-total-balance {
@@ -592,24 +592,46 @@
       return accountMap;
     }
 
-    function getTotalBalanceUpToDate(targetDateStr) {
-      const targetDate = new Date(targetDateStr + 'T23:59:59');
+    function getDailyNetMap(year, month) {
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const dailyNet = {};
 
-      let total = savedAccounts.reduce((sum, account) => {
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        dailyNet[dateStr] = 0;
+      }
+
+      transactions.forEach(t => {
+        const occurrences = getRecurringOccurrencesForMonth(t, year, month);
+
+        occurrences.forEach(occDate => {
+          const dateStr = `${occDate.getFullYear()}-${String(occDate.getMonth() + 1).padStart(2, '0')}-${String(occDate.getDate()).padStart(2, '0')}`;
+          if (!(dateStr in dailyNet)) return;
+
+          const amount = Number(t.amount || 0);
+          dailyNet[dateStr] += t.type === 'income' ? amount : -amount;
+        });
+      });
+
+      return dailyNet;
+    }
+
+    function getRunningBalancesForMonth(year, month) {
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const runningBalances = {};
+      const dailyNet = getDailyNetMap(year, month);
+
+      let runningTotal = savedAccounts.reduce((sum, account) => {
         return sum + Number(openingBalances[account] || 0);
       }, 0);
 
-      transactions.forEach(t => {
-        const normalizedDate = normalizeDateString(t.date);
-        if (!normalizedDate) return;
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        runningTotal += Number(dailyNet[dateStr] || 0);
+        runningBalances[dateStr] = runningTotal;
+      }
 
-        const txDate = new Date(normalizedDate + 'T00:00:00');
-        if (txDate <= targetDate) {
-          total += t.type === 'income' ? Number(t.amount) : -Number(t.amount);
-        }
-      });
-
-      return total;
+      return runningBalances;
     }
 
     async function updateOpeningBalance(account, value) {
@@ -786,9 +808,10 @@
       const firstDayRaw = new Date(year, month, 1).getDay();
       const firstDay = (firstDayRaw + 6) % 7;
       const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const filtered = getFilteredTransactions();
 
+      const filtered = getFilteredTransactions();
       const calendarMap = {};
+      const runningBalances = getRunningBalancesForMonth(year, month);
 
       filtered.forEach(t => {
         const occurrences = getRecurringOccurrencesForMonth(t, year, month);
@@ -810,7 +833,7 @@
         dayDiv.className = 'day';
 
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const totalBalance = getTotalBalanceUpToDate(dateStr);
+        const totalBalance = runningBalances[dateStr];
 
         dayDiv.innerHTML = `
           <div class="day-number">${day}</div>
