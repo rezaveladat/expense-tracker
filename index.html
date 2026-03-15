@@ -76,7 +76,16 @@
       background: #eef2ff;
       color: #1e3a8a;
     }
-    .calendar-item { font-size: 12px; padding: 4px 6px; border-radius: 6px; margin-top: 4px; color: white; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .calendar-item {
+      font-size: 12px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      margin-top: 4px;
+      color: white;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .calendar-income { background: #16a34a; }
     .calendar-expense { background: #dc2626; }
     .account-row { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; align-items: end; }
@@ -592,6 +601,49 @@
       return accountMap;
     }
 
+    function getBalanceBeforeMonth(year, month) {
+      const monthStart = new Date(year, month, 1, 0, 0, 0);
+
+      let total = savedAccounts.reduce((sum, account) => {
+        return sum + Number(openingBalances[account] || 0);
+      }, 0);
+
+      transactions.forEach(t => {
+        const normalizedDate = normalizeDateString(t.date);
+        if (!normalizedDate) return;
+
+        const baseDate = new Date(normalizedDate + 'T00:00:00');
+        if (isNaN(baseDate)) return;
+
+        const amount = Number(t.amount || 0);
+
+        if (t.frequency === 'once') {
+          if (baseDate < monthStart) {
+            total += t.type === 'income' ? amount : -amount;
+          }
+          return;
+        }
+
+        let cursor = new Date(baseDate);
+
+        while (cursor < monthStart) {
+          total += t.type === 'income' ? amount : -amount;
+
+          if (t.frequency === 'weekly') {
+            cursor.setDate(cursor.getDate() + 7);
+          } else if (t.frequency === 'fortnightly') {
+            cursor.setDate(cursor.getDate() + 14);
+          } else if (t.frequency === 'monthly') {
+            cursor.setMonth(cursor.getMonth() + 1);
+          } else {
+            break;
+          }
+        }
+      });
+
+      return total;
+    }
+
     function getDailyNetMap(year, month) {
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       const dailyNet = {};
@@ -621,9 +673,7 @@
       const runningBalances = {};
       const dailyNet = getDailyNetMap(year, month);
 
-      let runningTotal = savedAccounts.reduce((sum, account) => {
-        return sum + Number(openingBalances[account] || 0);
-      }, 0);
+      let runningTotal = getBalanceBeforeMonth(year, month);
 
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
