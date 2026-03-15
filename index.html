@@ -64,9 +64,18 @@
     .calendar-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; }
     .calendar-controls button { width: auto; padding: 8px 14px; }
     .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
-    .day-name, .day { background: #fff; border-radius: 10px; padding: 10px; min-height: 120px; border: 1px solid #e5e7eb; }
+    .day-name, .day { background: #fff; border-radius: 10px; padding: 10px; min-height: 140px; border: 1px solid #e5e7eb; }
     .day-name { font-weight: bold; text-align: center; min-height: auto; background: #eaf0ff; }
     .day-number { font-weight: bold; margin-bottom: 6px; }
+    .day-total-balance {
+      font-size: 11px;
+      font-weight: bold;
+      margin-bottom: 6px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      background: #eef2ff;
+      color: #1e3a8a;
+    }
     .calendar-item { font-size: 12px; padding: 4px 6px; border-radius: 6px; margin-top: 4px; color: white; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .calendar-income { background: #16a34a; }
     .calendar-expense { background: #dc2626; }
@@ -583,6 +592,26 @@
       return accountMap;
     }
 
+    function getTotalBalanceUpToDate(targetDateStr) {
+      const targetDate = new Date(targetDateStr + 'T23:59:59');
+
+      let total = savedAccounts.reduce((sum, account) => {
+        return sum + Number(openingBalances[account] || 0);
+      }, 0);
+
+      transactions.forEach(t => {
+        const normalizedDate = normalizeDateString(t.date);
+        if (!normalizedDate) return;
+
+        const txDate = new Date(normalizedDate + 'T00:00:00');
+        if (txDate <= targetDate) {
+          total += t.type === 'income' ? Number(t.amount) : -Number(t.amount);
+        }
+      });
+
+      return total;
+    }
+
     async function updateOpeningBalance(account, value) {
       try {
         setStatus('Saving opening balance to Google Sheets...');
@@ -747,14 +776,15 @@
       document.getElementById('monthYear').textContent =
         currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
-      ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => {
+      ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(day => {
         const div = document.createElement('div');
         div.className = 'day-name';
         div.textContent = day;
         calendar.appendChild(div);
       });
 
-      const firstDay = new Date(year, month, 1).getDay();
+      const firstDayRaw = new Date(year, month, 1).getDay();
+      const firstDay = (firstDayRaw + 6) % 7;
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       const filtered = getFilteredTransactions();
 
@@ -780,7 +810,12 @@
         dayDiv.className = 'day';
 
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        dayDiv.innerHTML = `<div class="day-number">${day}</div>`;
+        const totalBalance = getTotalBalanceUpToDate(dateStr);
+
+        dayDiv.innerHTML = `
+          <div class="day-number">${day}</div>
+          <div class="day-total-balance">Total: ${formatCurrency(totalBalance)}</div>
+        `;
 
         (calendarMap[dateStr] || []).forEach(t => {
           const item = document.createElement('div');
